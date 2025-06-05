@@ -1,0 +1,39 @@
+modules:
+  trigger:
+    - key: jira-attachment-to-confluence-hello-world
+      events:
+        - avi:jira:updated:issue
+      function: main
+      filter:
+        ignoreSelf: false
+        expression: event.issue.fields.project.key == "KVCE"
+
+    - key: issue-attachment-upload
+      events:
+        - avi:jira:updated:issue
+      function: main
+
+  function:  # ✅ 이 위치가 맞습니다!
+    - key: main
+      handler: index.run
+
+app:
+  runtime:
+    name: nodejs22.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/83d94e64-f764-4a75-863c-cba31c5ce273
+
+permissions:
+  scopes:
+    - read:issue:jira
+    - read:project:jira
+    - read:jira-work
+    - read:attachment:jira
+    - read:confluence-content.all
+    - write:confluence-content
+    - write:confluence-file
+  external:
+    fetch:
+      backend:
+        - "https://api.atlassian.com"
