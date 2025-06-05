@@ -1,9 +1,3 @@
-# Forge Hello World
-
-This project contains a Forge app written in Javascript that logs ```Hello World!``` when an issue is created in Jira.
-
-See [developer.atlassian.com/platform/forge/](https://developer.atlassian.com/platform/forge) for documentation and tutorials explaining Forge.
-
 ## Requirements
 
 See [Set up Forge](https://developer.atlassian.com/platform/forge/set-up-forge/) for instructions to get set up.
