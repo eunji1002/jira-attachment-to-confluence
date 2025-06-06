@@ -1,6 +1,6 @@
 modules:
   trigger:
-    - key: jira-attachment-to-confluence-hello-world
+    - key: issue-attachment-upload
       events:
         - avi:jira:updated:issue
       function: main
@@ -8,12 +8,7 @@ modules:
         ignoreSelf: false
         expression: event.issue.fields.project.key == "KVCE"
 
-    - key: issue-attachment-upload
-      events:
-        - avi:jira:updated:issue
-      function: main
-
-  function:  # ✅ 이 위치가 맞습니다!
+  function:
     - key: main
       handler: index.run
 
