@@ -28,11 +28,15 @@ permissions:
   scopes:
     - read:issue:jira
     - read:project:jira
+    - read:jira-user
     - read:jira-work
     - read:attachment:jira
+    - read:confluence-content.summary
     - read:confluence-content.all
     - write:confluence-content
     - write:confluence-file
+    - read:attachment:confluence
+    - write:attachment:confluence
   external:
     fetch:
       backend:

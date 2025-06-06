@@ -1,10 +1,19 @@
-import { requestJira, requestConfluence, fetch, route } from '@forge/api';
+import { asApp, fetch, route } from '@forge/api';
 
 const CONFLUENCE_PAGE_ID = '47415302';
 
 export async function run(event, context) {
   console.log('🔔 Triggered!');
   console.log('🧾 Raw Event:', JSON.stringify(event, null, 2));
+
+  try {
+    const res = await asApp().requestJira(route`/rest/api/3/issue/${event.issue.key}`);
+    const json = await res.json();
+
+    console.log("🧪 Issue access test OK:", json.key);
+  } catch (err) {
+    console.error("❌ App cannot access this issue:", err);
+  }
 
   const attachmentItems = event.changelog?.items?.filter(
     (item) => item.field === "Attachment"
@@ -33,7 +42,7 @@ export async function run(event, context) {
       // 👉 잠시 기다려서 첨부파일 접근 가능성 확보
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      const fileMetaRes = await requestJira(
+      const fileMetaRes = await asApp().requestJira(
         route`/rest/api/3/attachment/${attachmentId}`,
         { headers: { Accept: 'application/json' } }
       );
@@ -58,7 +67,7 @@ export async function run(event, context) {
       formData.append('file', new Blob([fileBuffer]), filename);
       formData.append('minorEdit', 'true');
 
-      const uploadRes = await requestConfluence(
+      const uploadRes = await asApp().requestConfluence(
         route`/wiki/rest/api/content/${CONFLUENCE_PAGE_ID}/child/attachment`,
         {
           method: 'POST',
