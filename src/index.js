@@ -1,86 +1,114 @@
 import { asApp, fetch, route } from '@forge/api';
 
-const CONFLUENCE_PAGE_ID = '47415302';
+const CUSTOM_FIELD_ID = 'customfield_10180';
 
 export async function run(event, context) {
   console.log('🔔 Triggered!');
   console.log('🧾 Raw Event:', JSON.stringify(event, null, 2));
 
+  const issueKey = event.issue.key;
+  const projectKey = event.issue.fields.project.key;
+  const aliasKey = projectKey.toLowerCase(); // 예: 'kvce'
+
   try {
-    const res = await asApp().requestJira(route`/rest/api/3/issue/${event.issue.key}`);
-    const json = await res.json();
+    const issueRes = await asApp().requestJira(route`/rest/api/3/issue/${issueKey}`);
+    const issue = await issueRes.json();
+    console.log("🧪 Issue access test OK:", issue.key);
 
-    console.log("🧪 Issue access test OK:", json.key);
-  } catch (err) {
-    console.error("❌ App cannot access this issue:", err);
-  }
+    const selections = issue.fields[CUSTOM_FIELD_ID];
+    const pageTitle = selections?.[0]?.value;
 
-  const attachmentItems = event.changelog?.items?.filter(
-    (item) => item.field === "Attachment"
-  );
-
-  if (!attachmentItems || attachmentItems.length === 0) {
-    console.log("ℹ️ No new attachments in changelog.");
-    return;
-  }
-
-  for (const item of attachmentItems) {
-    const attachmentId = item.to;
-
-    if (!attachmentId) {
-      console.warn(`⚠️ Skipping item with null attachmentId:`, JSON.stringify(item));
-      continue;
+    if (!pageTitle) {
+      console.warn('⚠️ 업로드 대상 페이지가 선택되지 않았습니다.');
+      return;
     }
 
-    // 👉 디버깅 로그 추가
-    console.log(`📌 issueKey: ${event.issue?.key}`);
-    console.log(`📌 projectKey: ${event.issue?.fields?.project?.key}`);
-    console.log(`👤 triggeredByUser: ${event.user?.accountId}`);
-    console.log(`📎 changelog item:`, JSON.stringify(item));
+    const allSpacesRes = await asApp().requestConfluence(
+      route`/wiki/api/v2/spaces`
+    );
+    const allSpacesJson = await allSpacesRes.json();
+    
+    const matchedSpace = allSpacesJson.results.find(
+      (space) => space.currentActiveAlias === aliasKey
+    );
 
-    try {
-      // 👉 잠시 기다려서 첨부파일 접근 가능성 확보
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+    if (!matchedSpace) {
+      console.error(`❌ alias '${aliasKey}'에 해당하는 Confluence 스페이스를 찾을 수 없습니다.`);
+      return;
+    }
 
-      const fileMetaRes = await asApp().requestJira(
-        route`/rest/api/3/attachment/${attachmentId}`,
-        { headers: { Accept: 'application/json' } }
-      );
-      const attachmentMeta = await fileMetaRes.json();
+    const trueSpaceKey = matchedSpace.id;
+    console.log(`🔎 '${aliasKey}' alias의 실제 spaceid는 '${trueSpaceKey}'`);
 
-      console.log('📦 attachmentMeta:', JSON.stringify(attachmentMeta, null, 2));
+    // ✅ 페이지 목록 중 제목 매칭
+    const pageListRes = await asApp().requestConfluence(
+      route`/wiki/api/v2/spaces/${trueSpaceKey}/pages`
+    );
+    const pageList = await pageListRes.json();
+    console.log(pageList)
+    const matchedPage = pageList.results.find(
+      (page) => page.title === pageTitle
+    );
 
-      const filename = attachmentMeta?.filename ?? `attachment-${attachmentId}`;
-      const contentUrl = attachmentMeta?.content;
+    if (!matchedPage) {
+      console.error(`❌ '${pageTitle}' 제목의 페이지를 스페이스 '${trueSpaceKey}'에서 찾을 수 없습니다.`);
+      return;
+    }
 
-      if (!contentUrl) {
-        console.error(`❌ No content URL found for attachmentId=${attachmentId}`);
+    const confluencePageId = matchedPage.id;
+    console.log(`✅ '${pageTitle}' 페이지 ID: ${confluencePageId}`);
+
+    const attachmentItems = event.changelog?.items?.filter(
+      (item) => item.field === "Attachment"
+    );
+
+    if (!attachmentItems || attachmentItems.length === 0) {
+      console.log("ℹ️ No new attachments in changelog.");
+      return;
+    }
+
+    for (const item of attachmentItems) {
+      const attachmentId = item.to;
+      if (!attachmentId) {
+        console.warn(`⚠️ Skipping item with null attachmentId`);
         continue;
       }
 
-      const fileResponse = await fetch(contentUrl, {
-        method: 'GET',
-      });
-      const fileBuffer = await fileResponse.arrayBuffer();
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      const formData = new FormData();
-      formData.append('file', new Blob([fileBuffer]), filename);
-      formData.append('minorEdit', 'true');
+        const fileMetaRes = await asApp().requestJira(
+          route`/rest/api/3/attachment/${attachmentId}`,
+          { headers: { Accept: 'application/json' } }
+        );
+        const attachmentMeta = await fileMetaRes.json();
 
-      const uploadRes = await asApp().requestConfluence(
-        route`/wiki/rest/api/content/${CONFLUENCE_PAGE_ID}/child/attachment`,
-        {
-          method: 'POST',
-          headers: {
-            'X-Atlassian-Token': 'no-check',
-          },
-          body: formData,
-        }
-      );
+        const filename = attachmentMeta?.filename ?? `attachment-${attachmentId}`;
+        const contentUrl = attachmentMeta?.content;
+        if (!contentUrl) continue;
 
-      console.log(`✅ Uploaded to Confluence: ${filename}`, await uploadRes.text());
-    } catch (err) {
-      console.error(`❌ Error uploading attachmentId=${attachmentId}:`, err);
+        const fileResponse = await fetch(contentUrl, { method: 'GET' });
+        const fileBuffer = await fileResponse.arrayBuffer();
+
+        const formData = new FormData();
+        formData.append('file', new Blob([fileBuffer]), filename);
+        formData.append('minorEdit', 'true');
+
+        const uploadRes = await asApp().requestConfluence(
+          route`/wiki/rest/api/content/${confluencePageId}/child/attachment`,
+          {
+            method: 'POST',
+            headers: { 'X-Atlassian-Token': 'no-check' },
+            body: formData,
+          }
+        );
+
+        console.log(`✅ Uploaded to page '${pageTitle}' (${filename})`);
+      } catch (err) {
+        console.error(`❌ Upload failed for attachmentId=${attachmentId}:`, err);
+      }
     }
+  } catch (err) {
+    console.error("❌ App failed to process issue:", err);
   }
 }
