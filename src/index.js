@@ -1,6 +1,7 @@
 import { asApp, fetch, route } from '@forge/api';
 
-const CUSTOM_FIELD_ID = 'customfield_10180';
+const CUSTOM_FIELD_ID_1 = 'customfield_10180';
+const CUSTOM_FIELD_ID_2 = 'customfield_10181';
 
 export async function run(event, context) {
   console.log('🔔 Triggered!');
@@ -15,8 +16,11 @@ export async function run(event, context) {
     const issue = await issueRes.json();
     console.log("🧪 Issue access test OK:", issue.key);
 
-    const selections = issue.fields[CUSTOM_FIELD_ID];
-    const pageTitle = selections?.[0]?.value;
+    const selections1 = issue.fields[CUSTOM_FIELD_ID_1];
+    const selections2 = issue.fields[CUSTOM_FIELD_ID_2];
+
+    // 둘 중 하나라도 값이 있으면 사용
+    const pageTitle = selections1?.[0]?.value ?? selections2?.[0]?.value;
 
     if (!pageTitle) {
       console.warn('⚠️ 업로드 대상 페이지가 선택되지 않았습니다.');
@@ -27,7 +31,7 @@ export async function run(event, context) {
       route`/wiki/api/v2/spaces`
     );
     const allSpacesJson = await allSpacesRes.json();
-    
+
     const matchedSpace = allSpacesJson.results.find(
       (space) => space.currentActiveAlias === aliasKey
     );
@@ -45,7 +49,6 @@ export async function run(event, context) {
       route`/wiki/api/v2/spaces/${trueSpaceKey}/pages`
     );
     const pageList = await pageListRes.json();
-    console.log(pageList)
     const matchedPage = pageList.results.find(
       (page) => page.title === pageTitle
     );
